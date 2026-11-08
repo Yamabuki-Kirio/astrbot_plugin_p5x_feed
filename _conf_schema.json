@@ -1,0 +1,70 @@
+{
+  "tieba_enabled": {
+    "description": "启用贴吧",
+    "type": "bool",
+    "default": true
+  },
+  "heybox_enabled": {
+    "description": "启用小黑盒（仅分区首屏）",
+    "type": "bool",
+    "default": true
+  },
+  "check_minutes": {
+    "description": "检查间隔，分钟，最少10",
+    "type": "int",
+    "default": 30
+  },
+  "max_posts": {
+    "description": "每次最多发送篇数，1–10",
+    "type": "int",
+    "default": 3
+  },
+  "tieba_forum": {
+    "description": "贴吧名称，不带“吧”",
+    "type": "string",
+    "default": "女神异闻录夜幕魅影"
+  },
+  "tieba_days": {
+    "description": "贴吧普通热门帖有效天数",
+    "type": "int",
+    "default": 7
+  },
+  "tieba_likes": {
+    "description": "贴吧主题点赞门槛，含等于",
+    "type": "int",
+    "default": 50
+  },
+  "tieba_pages": {
+    "description": "普通列表和精华列表各读取页数，1–10",
+    "type": "int",
+    "default": 3
+  },
+  "recheck_limit": {
+    "description": "每轮离开列表的近期贴吧帖子复查上限，0–30",
+    "type": "int",
+    "default": 10
+  },
+  "heybox_topics": {
+    "description": "小黑盒分区ID列表",
+    "type": "list",
+    "default": [
+      "600205",
+      "671144"
+    ]
+  },
+  "heybox_days": {
+    "description": "小黑盒热门帖有效天数",
+    "type": "int",
+    "default": 14
+  },
+  "heybox_likes": {
+    "description": "小黑盒点赞门槛，含等于",
+    "type": "int",
+    "default": 100
+  },
+  "blocked_words": {
+    "description": "标题和简介屏蔽词，匹配任一即跳过",
+    "type": "list",
+    "default": []
+  }
+}

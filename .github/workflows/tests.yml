@@ -1,0 +1,25 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: astrbot_plugin_p5x_feed
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -r astrbot_plugin_p5x_feed/requirements.txt
+      - run: python -m unittest discover -s astrbot_plugin_p5x_feed/tests -v
+      - run: node --check astrbot_plugin_p5x_feed/views/dashboard/app.js
