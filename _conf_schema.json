@@ -66,5 +66,58 @@
     "description": "标题和简介屏蔽词，匹配任一即跳过",
     "type": "list",
     "default": []
+  },
+  "send_mode": {
+    "description": "消息样式：forward 为合并转发，text 为纯文本",
+    "type": "string",
+    "default": "forward",
+    "options": [
+      "forward",
+      "text"
+    ]
+  },
+  "include_title_author": {
+    "description": "发送标题信息（来源、标题、作者、时间、互动数据）",
+    "type": "bool",
+    "default": true
+  },
+  "include_summary": {
+    "description": "显示正文摘录，保留段落换行",
+    "type": "bool",
+    "default": true
+  },
+  "include_links": {
+    "description": "显示原始链接",
+    "type": "bool",
+    "default": true
+  },
+  "include_images": {
+    "description": "合并转发时附带可读取的帖子配图，失败则跳过图片",
+    "type": "bool",
+    "default": true
+  },
+  "max_images_per_post": {
+    "description": "每篇最多配图数，1–3",
+    "type": "int",
+    "default": 1
+  },
+  "summary_length": {
+    "description": "每篇正文摘录上限，50–2000 字符，超出显示省略号",
+    "type": "int",
+    "default": 500
+  },
+  "forward_layout": {
+    "description": "转发节点布局：compact 每帖一个节点，sectioned 按信息、正文、图片、链接拆分",
+    "type": "string",
+    "default": "compact",
+    "options": [
+      "compact",
+      "sectioned"
+    ]
+  },
+  "include_overview": {
+    "description": "发送概览节点（纯文本模式为概览段落）",
+    "type": "bool",
+    "default": true
   }
 }

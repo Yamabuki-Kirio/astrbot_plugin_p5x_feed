@@ -4,7 +4,8 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+import html
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -31,6 +32,7 @@ class Post:
     likes: int | None
     comments: int
     good: bool = False
+    images: list[str] = field(default_factory=list)
 
     @property
     def key(self) -> str:
@@ -52,20 +54,58 @@ def qualifies(p: Post, cfg: dict, now: int) -> bool:
             and p.likes >= int(cfg.get(prefix + "_likes", 50 if prefix == "tieba" else 100)))
 
 
-def digest(posts: list[Post], heading: str = "P5X 帖子精选") -> str:
-    lines = [heading]
+def clean_excerpt(value: str, limit: int, multiline: bool = False) -> str:
+    text = html.unescape(str(value or "")).replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    if multiline:
+        text = "\n".join(" ".join(line.split()) for line in text.splitlines()).strip()
+        text = re.sub(r"\n{3,}", "\n\n", text)
+    else:
+        text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+
+def post_sections(p: Post, i: int, total: int, cfg: dict) -> list[tuple[str, str]]:
+    origin = "贴吧" if p.source == "tieba" else "小黑盒"
+    label = " · 精华" if p.source == "tieba" and p.good else ""
+    parts = []
+    if cfg.get("include_title_author", True):
+        date = datetime.fromtimestamp(p.created, CST).strftime("%Y-%m-%d %H:%M") if p.created else "日期未知"
+        parts.append(("info", f"📌 {i}/{total} · {origin}{label}\n📖 标题：{clean_excerpt(p.title, 140) or '（无标题）'}\n👤 作者：{clean_excerpt(p.author, 40) or '未知作者'}\n🕒 发布：{date}\n👍 点赞：{p.likes if p.likes is not None else '未知'}  ·  💬 回复：{p.comments}"))
+    summary = clean_excerpt(p.summary, int(cfg.get("summary_length", 500)), True)
+    if cfg.get("include_summary", True) and summary and summary != clean_excerpt(p.title, 140):
+        parts.append(("summary", "📝 正文摘录：\n" + summary))
+    if cfg.get("include_links", True):
+        parts.append(("link", "🌐 原始链接：\n" + p.url))
+    return parts
+
+
+def post_text(p: Post, i: int, total: int, cfg: dict | None = None) -> str:
+    return "\n\n".join(text for _, text in post_sections(p, i, total, cfg or {}))
+
+
+def digest(posts: list[Post], heading: str = "P5X 帖子精选", cfg: dict | None = None) -> str:
+    cfg = cfg or {}
+    lines = [f"🃏 {heading}\n本次收录 {len(posts)} 篇"] if cfg.get("include_overview", True) else []
+    lines += [text for i, p in enumerate(posts, 1) if (text := post_text(p, i, len(posts), cfg))]
+    return "\n\n────────────\n\n".join(lines)
+
+
+def format_preview(posts: list[Post], cfg: dict, heading: str = "P5X 帖子精选") -> str:
+    if cfg.get("send_mode", "forward") == "text":
+        return digest(posts, heading, cfg) or "（当前设置没有可发送的文字）"
+    nodes = [f"🃏 {heading}\n本次收录 {len(posts)} 篇"] if cfg.get("include_overview", True) else []
     for i, p in enumerate(posts, 1):
-        label = "贴吧精华" if p.source == "tieba" and p.good else ("贴吧热门" if p.source == "tieba" else "小黑盒热门")
-        title = " ".join(p.title.split())[:140]
-        author = " ".join(p.author.split())[:40] or "未知作者"
-        summary = " ".join(p.summary.split())[:180]
-        date = datetime.fromtimestamp(p.created, CST).strftime("%m-%d") if p.created else "日期未知"
-        lines += [f"\n{i}.【{label}】{title}", f"作者：{author} · {date}",
-                  f"赞 {p.likes if p.likes is not None else '未知'} · 回复 {p.comments}"]
-        if summary:
-            lines.append(summary)
-        lines.append(p.url)
-    return "\n".join(lines)
+        sections = post_sections(p, i, len(posts), cfg)
+        pictures = f"[配图占位：最多 {min(len(p.images), int(cfg.get('max_images_per_post', 1)))} 张，实际发送以下载成功为准]" if cfg.get("include_images", True) and p.images else ""
+        if cfg.get("forward_layout", "compact") == "sectioned":
+            nodes += [text for kind, text in sections if kind != "link"]
+            if pictures: nodes.append(pictures)
+            nodes += [text for kind, text in sections if kind == "link"]
+        else:
+            text = "\n\n".join([text for _, text in sections] + ([pictures] if pictures else []))
+            if text: nodes.append(text)
+    return "\n\n".join(f"【节点 {i} · 怪盗情报站】\n{text}" for i, text in enumerate(nodes, 1)) or "（当前设置没有可发送的节点）"
 
 
 class Store:
@@ -96,6 +136,8 @@ class Store:
         """)
         if "message" not in {r[1] for r in self.db.execute("PRAGMA table_info(history)")}:
             self.db.execute("ALTER TABLE history ADD COLUMN message TEXT NOT NULL DEFAULT ''")
+        if "layout" not in {r[1] for r in self.db.execute("PRAGMA table_info(history)")}:
+            self.db.execute("ALTER TABLE history ADD COLUMN layout TEXT NOT NULL DEFAULT '{}'")
         # A crash after claiming a send cannot prove whether OneBot accepted it.
         with self.db:
             self.db.execute("UPDATE runs SET state='unknown' WHERE state='sending'")
@@ -106,11 +148,13 @@ class Store:
         with self.db:
             self.db.execute("DELETE FROM history WHERE created<?", (now - 7 * 86400,))
 
-    def record_history(self, identity: str, session: str, posts: list[Post], trigger: str, now: int) -> bool:
+    def record_history(self, identity: str, session: str, posts: list[Post], trigger: str, now: int,
+                       message: str | None = None, layout: dict | None = None) -> bool:
         with self.db:
-            cur = self.db.execute("INSERT OR IGNORE INTO history(id,session,created,trigger,state,posts,message) VALUES(?,?,?,?,'sending',?,?)",
+            cur = self.db.execute("INSERT OR IGNORE INTO history(id,session,created,trigger,state,posts,message,layout) VALUES(?,?,?,?,'sending',?,?,?)",
                 (identity, session, now, trigger, json.dumps([asdict(p) for p in posts], ensure_ascii=False),
-                 digest(posts, "P5X 帖子分享" if trigger == "manual" else "P5X 帖子精选")))
+                 message if message is not None else digest(posts, "P5X 帖子分享" if trigger == "manual" else "P5X 帖子精选"),
+                 json.dumps(layout or {}, ensure_ascii=False)))
             if cur.rowcount and trigger == "manual":
                 self.db.executemany("INSERT OR IGNORE INTO deliveries VALUES(?,?,'sending')", [(session, p.key) for p in posts])
             return bool(cur.rowcount)

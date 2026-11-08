@@ -12,9 +12,10 @@ from astrbot.core.message.message_event_result import MessageChain
 from .core import CST, Store, clock, digest
 from .sources import Sources
 from .web import WebUI
+from .presentation import prepare
 
 
-@register("astrbot_plugin_p5x_feed", "Yamabuki-Kirio", "P5X 贴吧与小黑盒帖子推送", "0.2.0")
+@register("astrbot_plugin_p5x_feed", "Yamabuki-Kirio", "P5X 贴吧与小黑盒帖子推送", "0.3.1")
 class P5XFeed(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -54,6 +55,7 @@ class P5XFeed(Star):
             ("tieba_pages", 3, 1, 10), ("tieba_days", 7, 1, 90),
             ("heybox_days", 14, 1, 90), ("tieba_likes", 50, 1, 100000),
             ("heybox_likes", 100, 1, 100000), ("recheck_limit", 10, 0, 30),
+            ("summary_length", 500, 50, 2000), ("max_images_per_post", 1, 1, 3),
         ]:
             try:
                 cfg[key] = max(low, min(high, int(cfg.get(key, default))))
@@ -98,12 +100,15 @@ class P5XFeed(Star):
             except (ValueError, AttributeError):
                 logger.warning("[P5X推送] 订阅会话无法解析或平台不可用")
                 continue
+            if self.store.db.execute("SELECT 1 FROM runs WHERE session=? AND day=?", (session, day)).fetchone():
+                continue
+            chain, text, layout = await prepare(self.context, self.sources, session, posts, "P5X 帖子精选", cfg)
             if not self.store.claim(session, day, posts):
                 continue
             history_id = f"auto:{session}:{day}"
-            self.store.record_history(history_id, session, posts, "auto", int(time.time()))
+            self.store.record_history(history_id, session, posts, "auto", int(time.time()), text, layout)
             try:
-                result = await asyncio.wait_for(self.context.send_message(session, MessageChain().message(digest(posts))), timeout=45)
+                result = await asyncio.wait_for(self.context.send_message(session, chain), timeout=45)
                 state = "submitted" if result else "unknown"
             except asyncio.CancelledError:
                 self.store.finish(session, day, posts, "unknown")
@@ -180,7 +185,12 @@ class P5XFeed(Star):
         async with self.lock:
             cfg = self.config()
             posts = self.store.candidates(cfg, int(time.time()))[:cfg["max_posts"]]
-        yield event.plain_result(digest(posts, "P5X 当前达标帖（手动查看）") if posts else "当前缓存没有符合条件的帖子。请用 /p5x推送状态 查看来源是否正常。")
+        if not posts:
+            yield event.plain_result("当前缓存没有符合条件的帖子。请用 /p5x推送状态 查看来源是否正常。")
+            return
+        chain, _, _ = await prepare(self.context, self.sources, event.unified_msg_origin, posts,
+                                    "P5X 当前达标帖（手动查看）", cfg)
+        yield event.chain_result(chain.chain)
 
     @filter.command("p5x推送状态")
     async def status(self, event: AstrMessageEvent):

@@ -17,7 +17,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.modules = {}
         names = ["astrbot", "astrbot.api", "astrbot.api.event", "astrbot.api.star", "astrbot.core",
                  "astrbot.core.message", "astrbot.core.message.message_event_result", "astrbot.core.platform",
-                 "astrbot.core.platform.message_session"]
+                 "astrbot.core.platform.message_session", "astrbot.api.message_components"]
         for name in names:
             self.modules[name] = sys.modules.get(name)
             sys.modules[name] = types.ModuleType(name)
@@ -33,9 +33,23 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         star.Star, star.Context, star.StarTools = Base, object, object
         star.register = lambda *a: lambda cls: cls
         class Chain:
+            def __init__(self, chain=None):
+                self.chain = chain or []
             def message(self, text):
                 self.text = text
                 return self
+        class Plain:
+            def __init__(self, text): self.text = text
+        class Node:
+            def __init__(self, **kwargs): self.__dict__.update(kwargs)
+        class Nodes:
+            def __init__(self, nodes): self.nodes = nodes
+        class Image:
+            @staticmethod
+            def fromBytes(data): return types.SimpleNamespace(data=data)
+        comp = sys.modules['astrbot.api.message_components']
+        comp.Plain, comp.Node, comp.Nodes, comp.Image = Plain, Node, Nodes, Image
+        sys.modules['astrbot.api'].message_components = comp
         sys.modules['astrbot.core.message.message_event_result'].MessageChain = Chain
         sys.modules['astrbot.core.platform.message_session'].MessageSesion = types.SimpleNamespace(
             from_str=lambda s: types.SimpleNamespace(platform_name=s.split(':')[0]))

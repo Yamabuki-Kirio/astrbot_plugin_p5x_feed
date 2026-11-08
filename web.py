@@ -9,12 +9,13 @@ import re
 from dataclasses import asdict
 from pathlib import Path
 
-from .core import clock, qualifies, Post
+from .core import clock, qualifies, Post, digest, format_preview
 
 SCHEMA = json.loads((Path(__file__).parent / "_conf_schema.json").read_text(encoding="utf-8"))
 LIMITS = {"check_minutes": (10, 1440), "max_posts": (1, 10), "tieba_days": (1, 90),
           "heybox_days": (1, 90), "tieba_likes": (1, 100000), "heybox_likes": (1, 100000),
-          "tieba_pages": (1, 10), "recheck_limit": (0, 30)}
+          "tieba_pages": (1, 10), "recheck_limit": (0, 30),
+          "summary_length": (50, 2000), "max_images_per_post": (1, 3)}
 
 
 def validate_config(body: dict) -> dict:
@@ -23,6 +24,10 @@ def validate_config(body: dict) -> dict:
     result = {}
     for key, value in body.items():
         kind = SCHEMA[key]["type"]
+        if key == "forward_layout" and value not in ("compact", "sectioned"):
+            raise ValueError("请选择有效的转发节点布局。")
+        if key == "send_mode" and value not in ("forward", "text"):
+            raise ValueError("消息样式请选择合并转发或纯文本。")
         if kind == "bool" and type(value) is not bool:
             raise ValueError(f"{SCHEMA[key]['description']}必须为开关。")
         if kind == "int":
@@ -99,11 +104,12 @@ class WebUI:
                 history.append({**dict(row), "posts": json.loads(row["posts"])})
             return {"status": "ok", "data": {"config": cfg, "sources": sources, "subscriptions": subs,
                     "posts": [asdict(x) for x in posts],
+                    "message_preview": format_preview(posts[:p.config()["max_posts"]], p.config()) if posts else "",
                     "stats": {"tracked": p.store.db.execute("SELECT count(*) FROM posts").fetchone()[0],
                               "qualified": len(p.store.candidates(p.config(), now)), "groups": len(subs)},
                     "history": history, "test_at": self.test_at,
                     "test_posts": [asdict(x) for x in self.test_posts.values()],
-                    "server_time": now, "version": "0.2.0"}}
+                    "server_time": now, "version": "0.3.1"}}
 
     def platforms(self):
         return [x for x in self.plugin.context.platform_manager.platform_insts if x.meta().name == "aiocqhttp"]
@@ -199,11 +205,11 @@ class WebUI:
                     raise ValueError("部分帖子预览已过期，请重新测试爬取或刷新。")
                 posts = [available[k] for k in keys]
                 hid = "manual:" + identity
-                p.store.record_history(hid, session, posts, "manual", int(time.time()))
-                from astrbot.core.message.message_event_result import MessageChain
-                from .core import digest
+                from .presentation import prepare
+                chain, text, layout = await prepare(p.context, p.sources, session, posts, "P5X 帖子分享", p.config())
+                p.store.record_history(hid, session, posts, "manual", int(time.time()), text, layout)
                 try:
-                    result = await asyncio.wait_for(p.context.send_message(session, MessageChain().message(digest(posts, "P5X 帖子分享"))), timeout=45)
+                    result = await asyncio.wait_for(p.context.send_message(session, chain), timeout=45)
                     state = "submitted" if result else "unknown"
                 except asyncio.CancelledError:
                     p.store.history_result(hid, session, posts, "unknown")

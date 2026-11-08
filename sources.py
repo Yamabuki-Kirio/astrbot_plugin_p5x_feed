@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 import aiohttp
 
 from .core import Post
+from .presentation import image_urls
 
 
 def number(value, default=0):
@@ -34,10 +35,17 @@ def tieba_post(t: dict, first: dict | None = None) -> Post:
     likes = like_count(t.get("agree") or {}, "agree_num")
     if likes is None:
         likes = like_count(t, "agree_num")
+    pics = []
+    for item in t.get("pic_list") or []:
+        if isinstance(item, dict):
+            pics.extend([item.get("original_pic"), item.get("big_pic"), item.get("pic_url")])
+    for item in first.get("content") or []:
+        if isinstance(item, dict) and number(item.get("type")) == 3:
+            pics.append(item.get("origin_src") or item.get("src"))
     return Post("tieba", str(t["id"]), str(t.get("title") or ""),
                 str(author.get("name_show") or author.get("name") or ""), summary,
                 f"https://tieba.baidu.com/p/{t['id']}", number(t.get("create_time") or first.get("time")),
-                likes, number(t.get("reply_num")), bool(number(t.get("is_good"))))
+                likes, number(t.get("reply_num")), bool(number(t.get("is_good"))), image_urls(pics))
 
 
 # Independent Python implementation of the MIT heybox-core hkey algorithm.
@@ -76,7 +84,7 @@ def hkey(path: str, timestamp: int, nonce: str) -> str:
 class Sources:
     def __init__(self):
         self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20),
-                                            headers={"User-Agent": "Mozilla/5.0 P5XFeed/0.2.0"})
+                                            headers={"User-Agent": "Mozilla/5.0 P5XFeed/0.3.0"})
         self.device = secrets.token_hex(16)
         self.warnings: dict[str, str] = {}
 
@@ -180,7 +188,8 @@ class Sources:
                         continue
                     p = Post("heybox", str(t["linkid"]), str(t.get("title") or ""),
                              str((t.get("user") or {}).get("username") or ""), str(t.get("description") or ""),
-                             url, number(t.get("create_at")), like_count(t, "link_award_num"), number(t.get("comment_num")))
+                             url, number(t.get("create_at")), like_count(t, "link_award_num"), number(t.get("comment_num")),
+                             images=image_urls(t.get("imgs") or t.get("thumbs") or []))
                     found[p.id] = p
             except (RuntimeError, aiohttp.ClientError, ValueError, TimeoutError):
                 failures += 1
