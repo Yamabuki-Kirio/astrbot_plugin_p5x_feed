@@ -31,3 +31,8 @@ https://github.com/drdon1234/astrbot_plugin_media_parser
 https://github.com/674537331/astrbot_plugin_xiaoheihe_adapter
 
 以上项目不保证本插件接口的长期可用性。
+
+
+帖子卡片使用 Noto Sans SC（Noto CJK），SIL Open Font License 1.1。
+字体来源：https://github.com/notofonts/noto-cjk
+完整许可见 assets/OFL.txt。

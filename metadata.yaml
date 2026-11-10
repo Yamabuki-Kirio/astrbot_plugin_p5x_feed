@@ -1,7 +1,7 @@
 name: astrbot_plugin_p5x_feed
 display_name: 怪盗情报站 · P5X 帖子推送
 desc: P5X 贴吧与小黑盒推送，含 WebUI 配置、爬取测试、指定群手动推送及七天推送历史。
-version: v0.3.1
+version: v0.3.3
 author: Yamabuki-Kirio
 repo: https://github.com/Yamabuki-Kirio/astrbot_plugin_p5x_feed
 license: MIT

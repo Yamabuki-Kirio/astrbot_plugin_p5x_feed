@@ -35,9 +35,35 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(image_urls(values,1),[values[0]])
         self.assertEqual(image_urls(values),[values[0], values[-1]])
 
+    def test_image_objects_and_url_normalization(self):
+        self.assertEqual(image_urls([
+            {'url': '//imgheybox.max-c.com/a.jpg'},
+            {'original': {'url': 'http://tiebapic.baidu.com/b.jpg'}},
+            {'src': 'https://evil.test/c.jpg'},
+            ['https://imgheybox.max-c.com/a.jpg'],
+        ]), ['https://imgheybox.max-c.com/a.jpg', 'https://tiebapic.baidu.com/b.jpg'])
+
 
 # Reuse the host fixture without rediscovering its entire existing test suite.
 class PresentationHostTests(host.DeliveryTests):
+    async def test_collected_images_reach_automatic_and_manual_messages(self):
+        from astrbot_plugin_p5x_feed.sources import tieba_post
+        post = tieba_post({'id': '42', 'title': '配图帖子', 'pic_list': [
+            {'original': {'url': '//tiebapic.baidu.com/example.jpg'}}]})
+        self.post.images = post.images
+        self.plugin.sources.session = object()
+        self.plugin.store.ingest(self.post.source, [self.post], self.plugin.config(), int(__import__('time').time()))
+        with patch('astrbot_plugin_p5x_feed.presentation.load_image', new=AsyncMock(return_value=b'image')):
+            await self.plugin.send_due()
+            chain = self.context.send_message.await_args.args[1]
+            self.assertEqual(chain.chain[0].nodes[1].content[2].data, b'image')
+            self.plugin.web.body = AsyncMock(return_value={'request_id': 'image-manual-12345678',
+                'session': 'bot:GroupMessage:123', 'keys': [self.post.key]})
+            result = await self.plugin.web.send()
+            self.assertEqual(result['data']['state'], 'submitted')
+            chain = self.context.send_message.await_args.args[1]
+            self.assertEqual(chain.chain[0].nodes[1].content[2].data, b'image')
+
     async def test_sectioned_node_selection_matches_preview(self):
         from astrbot_plugin_p5x_feed.presentation import prepare
         from astrbot_plugin_p5x_feed.core import format_preview
@@ -64,6 +90,7 @@ class PresentationHostTests(host.DeliveryTests):
         self.assertEqual(len(chain.chain),1)
         nodes = chain.chain[0].nodes
         self.assertEqual(len(nodes),2)
+        self.assertTrue(nodes[1].content[1].data.startswith(b'\x89PNG'))
         self.assertIn('正文', nodes[1].content[0].text) if self.post.summary else None
         row = self.plugin.store.db.execute('SELECT message,layout FROM history').fetchone()
         self.assertIn(nodes[1].content[0].text,row['message'])
@@ -90,7 +117,7 @@ class PresentationHostTests(host.DeliveryTests):
         from astrbot_plugin_p5x_feed.presentation import prepare
         with patch('astrbot_plugin_p5x_feed.presentation.load_image',new=AsyncMock(return_value=b'image-bytes')) as fetch:
             chain,_,layout = await prepare(self.context,self.plugin.sources,'bot:GroupMessage:123',[self.post],'测试',{})
-            self.assertEqual(chain.chain[0].nodes[1].content[1].data,b'image-bytes')
+            self.assertEqual(chain.chain[0].nodes[1].content[2].data,b'image-bytes')
             self.assertEqual(len(layout['images']),1)
             await prepare(self.context,self.plugin.sources,'bot:GroupMessage:123',[self.post],'测试',{'include_images':False})
             self.assertEqual(fetch.await_count,1)
@@ -103,7 +130,8 @@ class PresentationHostTests(host.DeliveryTests):
             chain,text,layout = await prepare(self.context,self.plugin.sources,'bot:GroupMessage:123',[self.post],'测试',{})
         self.assertIn('测试',text)
         self.assertEqual(layout['images'],[])
-        self.assertEqual(len(chain.chain[0].nodes[1].content),1)
+        self.assertEqual(len(chain.chain[0].nodes[1].content),2)
+        self.assertEqual(layout['cards'], [self.post.key])
 
 
 # unittest discovers inherited test methods; keep only the new checks on this subclass.

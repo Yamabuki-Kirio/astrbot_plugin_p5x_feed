@@ -92,7 +92,7 @@
     "default": true
   },
   "include_images": {
-    "description": "合并转发时附带可读取的帖子配图，失败则跳过图片",
+    "description": "生成帖子信息卡片并附带原帖配图（合并转发）",
     "type": "bool",
     "default": true
   },

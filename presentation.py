@@ -10,10 +10,28 @@ from .core import digest, post_text, post_sections
 
 
 def image_urls(values: list, limit: int = 3) -> list[str]:
+    """Extract media URLs from strings and upstream image objects, in quality order."""
     result = []
-    for value in values:
+    def candidates(items):
+        for item in items:
+            if isinstance(item, (list, tuple)):
+                yield from candidates(item)
+            elif isinstance(item, dict):
+                for key in ("original_pic", "origin_src", "original", "big_pic", "big", "url", "src", "pic_url", "thumb"):
+                    if item.get(key):
+                        yield from candidates([item[key]])
+                        break
+            else:
+                yield item
+
+    for value in candidates(values):
         if not isinstance(value, str):
             continue
+        value = value.strip()
+        if value.startswith("//"):
+            value = "https:" + value
+        elif value.startswith("http://"):
+            value = "https://" + value[7:]
         try:
             u = urlsplit(value)
             allowed = ("bdimg.com", "baidu.com", "bdstatic.com", "max-c.com")
@@ -94,6 +112,7 @@ async def prepare(context, sources, session: str, posts: list, heading: str, cfg
             await asyncio.gather(*tasks, return_exceptions=True)
     images = [t.result() if not t.cancelled() and t.exception() is None else None for t in tasks]
     delivered = []
+    cards = []
     for i, p in enumerate(posts):
         sections = post_sections(p, i+1, len(posts), cfg)
         content = [Comp.Plain(post_text(p, i+1, len(posts), cfg))] if sections else []
@@ -102,6 +121,11 @@ async def prepare(context, sources, session: str, posts: list, heading: str, cfg
             if index == i and data:
                 picture_components.append(Comp.Image.fromBytes(data))
                 delivered.append({"post": p.key, "url": url})
+        if cfg.get("include_images", True):
+            from .cards import render_card
+            card = await asyncio.to_thread(render_card, p, cfg)
+            picture_components.insert(0, Comp.Image.fromBytes(card))
+            cards.append(p.key)
         if cfg.get("forward_layout", "compact") == "sectioned":
             for kind, text_part in sections:
                 if kind != "link": add([Comp.Plain(text_part)])
@@ -114,4 +138,4 @@ async def prepare(context, sources, session: str, posts: list, heading: str, cfg
         raise ValueError("当前设置没有可发送的节点，请开启至少一项有内容的节点。")
     # Construct everything before claiming a delivery; no speculative fallback
     # after a platform send, which could duplicate a successfully accepted message.
-    return MessageChain([Comp.Nodes(nodes)]), text, {"mode": "forward", "forward_layout": cfg.get("forward_layout", "compact"), "node_count": len(nodes), "images": delivered}
+    return MessageChain([Comp.Nodes(nodes)]), text, {"mode": "forward", "forward_layout": cfg.get("forward_layout", "compact"), "node_count": len(nodes), "images": delivered, "cards": cards}

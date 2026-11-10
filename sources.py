@@ -35,13 +35,10 @@ def tieba_post(t: dict, first: dict | None = None) -> Post:
     likes = like_count(t.get("agree") or {}, "agree_num")
     if likes is None:
         likes = like_count(t, "agree_num")
-    pics = []
-    for item in t.get("pic_list") or []:
-        if isinstance(item, dict):
-            pics.extend([item.get("original_pic"), item.get("big_pic"), item.get("pic_url")])
-    for item in first.get("content") or []:
+    pics = list(t.get("pic_list") or [])
+    for item in (t.get("abstract") or []) + (first.get("content") or []):
         if isinstance(item, dict) and number(item.get("type")) == 3:
-            pics.append(item.get("origin_src") or item.get("src"))
+            pics.append(item)
     return Post("tieba", str(t["id"]), str(t.get("title") or ""),
                 str(author.get("name_show") or author.get("name") or ""), summary,
                 f"https://tieba.baidu.com/p/{t['id']}", number(t.get("create_time") or first.get("time")),
@@ -189,7 +186,7 @@ class Sources:
                     p = Post("heybox", str(t["linkid"]), str(t.get("title") or ""),
                              str((t.get("user") or {}).get("username") or ""), str(t.get("description") or ""),
                              url, number(t.get("create_at")), like_count(t, "link_award_num"), number(t.get("comment_num")),
-                             images=image_urls(t.get("imgs") or t.get("thumbs") or []))
+                             images=image_urls([t.get("imgs") or [], t.get("thumbs") or []]))
                     found[p.id] = p
             except (RuntimeError, aiohttp.ClientError, ValueError, TimeoutError):
                 failures += 1

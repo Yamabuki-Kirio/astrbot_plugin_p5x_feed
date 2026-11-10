@@ -5,7 +5,7 @@
 **AstrBot 插件 · 贴吧精华与热门帖 · 小黑盒热门帖 · 定时群推送**
 
 [![Tests](https://github.com/Yamabuki-Kirio/astrbot_plugin_p5x_feed/actions/workflows/tests.yml/badge.svg)](https://github.com/Yamabuki-Kirio/astrbot_plugin_p5x_feed/actions/workflows/tests.yml)
-[![Version](https://img.shields.io/badge/version-v0.3.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.3.3-blue)](CHANGELOG.md)
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.29%2C%3C5-7952b3)](https://github.com/AstrBotDevs/AstrBot)
 [![OneBot](https://img.shields.io/badge/OneBot-V11-green)](#环境要求)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -83,7 +83,7 @@ https://tieba.baidu.com/p/帖子ID
 | AstrBot | `>=4.29,<5` |
 | 平台适配器 | `aiocqhttp`，即 OneBot V11 群聊 |
 | 网络 | AstrBot 所在环境可访问贴吧、小黑盒及对应图片 HTTPS 地址 |
-| Python 依赖 | `aiohttp>=3.10,<4`，由 `requirements.txt` 声明 |
+| Python 依赖 | `aiohttp>=3.10,<4`、`Pillow>=10.4,<13`，由 `requirements.txt` 声明 |
 | 合并转发 | 协议端支持 `send_group_forward_msg`；不可用时手动改为纯文本 |
 
 WebUI 使用插件自带静态资源，无需前端构建，复用 AstrBot 后台登录，不另开端口或要求额外 Token。
@@ -158,12 +158,13 @@ https://github.com/Yamabuki-Kirio/astrbot_plugin_p5x_feed
 可分别开关概览、标题信息、正文摘录、图片和原始链接。**来源、时间、点赞和回复数属于标题信息，关闭该项会一并隐藏。**
 
 - 正文摘录保留段落，默认最多 500 字符，可设置 50–2000，超出显示省略号；不调用 AI 生成摘要，也不承诺取得完整正文。
-- 配图仅读来源返回的字段，默认每篇一张、最多三张。贴吧列表不一定提供图片。
-- 图片仅接受已知媒体域名的 HTTPS 地址，不跟随重定向；单图最大 3 MB，并校验格式。读取失败跳过图片。
+- 配图读取来源返回的图片字符串、图片对象及嵌套原图字段，兼容协议相对地址，并将已知媒体域名的 HTTP 地址升级为 HTTPS。原帖配图默认每篇一张、最多三张，另生成一张信息卡片；贴吧列表不一定提供原图。
+- 开启图片且使用合并转发时，每篇额外生成一张帖子信息卡片；没有原帖配图或下载失败也会生成。卡片离线使用随插件附带的中文字体，文字遵循标题、正文和链接开关。关闭全部文字时显示“帖子配图分享”。
+- 原帖图片仅接受已知媒体域名的 HTTPS 地址，不跟随重定向；单图最大 3 MB，并校验格式。读取失败跳过图片。
 - 全部内容关闭，或最终没有任何可发送内容时，阻止提交群消息。
 - 合并转发提交后若结果未知，不自动降级重发。协议端不支持合并转发时，请主动选择纯文本。
 
-**保存配置后**，在“帖子预览与手动推送”中展开节点预览。预览使用当前达标帖和已保存设置；图片显示占位说明，实际发送以读取成功为准。
+**保存配置后**，在“帖子预览与手动推送”中展开节点预览。预览使用当前达标帖和已保存设置；图片显示卡片与原帖配图占位说明；卡片在本地生成，原帖配图以读取成功为准。
 
 ### 测试爬取与手动推送
 
@@ -223,7 +224,7 @@ https://github.com/Yamabuki-Kirio/astrbot_plugin_p5x_feed
 | `include_overview` | `true` | 发送概览节点（纯文本模式为概览段落） |
 | `include_title_author` | `true` | 发送标题信息（来源、标题、作者、时间、互动数据） |
 | `include_summary` | `true` | 显示正文摘录，保留段落换行 |
-| `include_images` | `true` | 合并转发时附带可读取的帖子配图，失败则跳过图片 |
+| `include_images` | `true` | 合并转发时生成帖子信息卡片，并附带可读取的原帖配图；原图失败不影响卡片 |
 | `include_links` | `true` | 显示原始链接 |
 | `summary_length` | `500` | 每篇正文摘录上限，50–2000 字符，超出显示省略号 |
 | `max_images_per_post` | `1` | 每篇最多配图数，1–3 |
@@ -259,7 +260,7 @@ data/plugin_data/astrbot_plugin_p5x_feed/feed.sqlite3
 
 ### 为什么没有图片或只有正文摘录？
 
-只使用来源返回的图片与文字字段，不额外获取全文。列表可能没有图片，图片也可能因过期或网络问题读取失败；正文摘录受长度设置限制。
+合并转发并开启图片时，每篇都会在本地生成帖子信息卡片；原帖配图只使用来源返回的图片字段，不额外获取全文。列表可能没有图片，图片也可能因过期或网络问题读取失败；正文摘录受长度设置限制。
 
 ### 为什么预览没有跟随刚才修改的开关变化？
 
@@ -292,7 +293,7 @@ python -m unittest discover -s astrbot_plugin_p5x_feed/tests -v
 node --check astrbot_plugin_p5x_feed/views/dashboard/app.js
 ```
 
-当前有 29 项自动测试，覆盖筛选、基线、分群去重、持久化、配置校验与回滚、手动发送幂等、群成员核验、历史分页及消息节点选择。投递测试使用模拟宿主，不会发送真实群消息。
+当前有 35 项自动测试，覆盖筛选、基线、分群去重、持久化、配置校验与回滚、手动发送幂等、群成员核验、历史分页及消息节点选择。投递测试使用模拟宿主，不会发送真实群消息。
 
 桌面及手机界面已做浏览器模拟交互检查；真实 AstrBot 加载、群管理员识别及 QQ 转发显示效果仍需在自己的测试群验收。
 

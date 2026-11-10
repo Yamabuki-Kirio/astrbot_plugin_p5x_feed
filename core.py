@@ -98,6 +98,8 @@ def format_preview(posts: list[Post], cfg: dict, heading: str = "P5X 帖子精�
     for i, p in enumerate(posts, 1):
         sections = post_sections(p, i, len(posts), cfg)
         pictures = f"[配图占位：最多 {min(len(p.images), int(cfg.get('max_images_per_post', 1)))} 张，实际发送以下载成功为准]" if cfg.get("include_images", True) and p.images else ""
+        if cfg.get("include_images", True):
+            pictures = "[帖子信息卡片：本地生成 1 张]" + ("\n" + pictures if pictures else "")
         if cfg.get("forward_layout", "compact") == "sectioned":
             nodes += [text for kind, text in sections if kind != "link"]
             if pictures: nodes.append(pictures)

@@ -15,7 +15,7 @@ from .web import WebUI
 from .presentation import prepare
 
 
-@register("astrbot_plugin_p5x_feed", "Yamabuki-Kirio", "P5X 贴吧与小黑盒帖子推送", "0.3.1")
+@register("astrbot_plugin_p5x_feed", "Yamabuki-Kirio", "P5X 贴吧与小黑盒帖子推送", "0.3.3")
 class P5XFeed(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)

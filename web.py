@@ -109,7 +109,7 @@ class WebUI:
                               "qualified": len(p.store.candidates(p.config(), now)), "groups": len(subs)},
                     "history": history, "test_at": self.test_at,
                     "test_posts": [asdict(x) for x in self.test_posts.values()],
-                    "server_time": now, "version": "0.3.1"}}
+                    "server_time": now, "version": "0.3.3"}}
 
     def platforms(self):
         return [x for x in self.plugin.context.platform_manager.platform_insts if x.meta().name == "aiocqhttp"]
